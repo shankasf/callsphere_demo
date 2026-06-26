@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface DemoLeadInput {
@@ -107,14 +108,21 @@ export class DemoService {
    * `range` is one of 7d | 30d | all; `industry` is a slug or 'all'.
    */
   async getChatbotMetrics(industry = 'all', range = '7d'): Promise<any> {
+    // Validate/normalize inputs to a fixed set — no user string ever reaches SQL
+    // as text; everything below uses parameterized Prisma.sql bindings.
     const days = range === '30d' ? 30 : range === 'all' ? null : 7;
-    const sinceSql = days ? `created_at >= now() - interval '${days} days'` : 'TRUE';
-    const indClause =
-      industry && industry !== 'all'
-        ? `AND industry_slug = ${this.q(industry)}`
-        : '';
+    const dailyDays = days ?? 14;
+    const ind = industry && industry !== 'all' ? industry : null;
 
-    const totalsRows = await this.prisma.$queryRawUnsafe<any[]>(`
+    // Parameterized, composable WHERE fragments.
+    const since = (col: Prisma.Sql) =>
+      days
+        ? Prisma.sql`AND ${col} >= now() - make_interval(days => ${days})`
+        : Prisma.empty;
+    const byInd = (col: Prisma.Sql) =>
+      ind ? Prisma.sql`AND ${col} = ${ind}` : Prisma.empty;
+
+    const totalsRows = await this.prisma.$queryRaw<any[]>(Prisma.sql`
       SELECT
         COUNT(*)::int AS messages,
         COUNT(DISTINCT session_id)::int AS sessions,
@@ -122,60 +130,64 @@ export class DemoService {
         COUNT(*) FILTER (WHERE 'book_appointment' = ANY(tool_calls))::int AS book_calls,
         COUNT(*) FILTER (WHERE 'search_knowledge' = ANY(tool_calls))::int AS kb_calls
       FROM demo_chat_messages
-      WHERE ${sinceSql} ${indClause}
+      WHERE TRUE ${since(Prisma.raw('created_at'))} ${byInd(Prisma.raw('industry_slug'))}
     `);
     const totals = totalsRows[0] || {};
 
     // Bookings made *from chat* = appointments whose session is a chat session.
-    const bookingsRows = await this.prisma.$queryRawUnsafe<any[]>(`
+    const bookingsRows = await this.prisma.$queryRaw<any[]>(Prisma.sql`
       SELECT COUNT(*)::int AS bookings,
              COUNT(*) FILTER (WHERE a.confirmation_sent)::int AS emailed,
              COUNT(DISTINCT a.session_id)::int AS booking_sessions
       FROM demo_appointments a
       WHERE a.session_id IN (
         SELECT DISTINCT session_id FROM demo_chat_messages
-        WHERE ${sinceSql} ${indClause}
+        WHERE TRUE ${since(Prisma.raw('created_at'))} ${byInd(Prisma.raw('industry_slug'))}
       )
-      ${days ? `AND a.created_at >= now() - interval '${days} days'` : ''}
+      ${since(Prisma.raw('a.created_at'))}
     `);
     const bookings = bookingsRows[0] || {};
 
-    const byIndustry = await this.prisma.$queryRawUnsafe<any[]>(`
+    const byIndustry = await this.prisma.$queryRaw<any[]>(Prisma.sql`
       SELECT m.industry_slug AS slug,
              COALESCE(m.industry_name, m.industry_slug) AS name,
              COUNT(*)::int AS messages,
              COUNT(DISTINCT m.session_id)::int AS sessions
       FROM demo_chat_messages m
-      WHERE ${sinceSql}
+      WHERE TRUE ${since(Prisma.raw('m.created_at'))}
       GROUP BY m.industry_slug, m.industry_name
       ORDER BY messages DESC
     `);
 
-    const topServices = await this.prisma.$queryRawUnsafe<any[]>(`
+    const topServices = await this.prisma.$queryRaw<any[]>(Prisma.sql`
       SELECT a.service, COUNT(*)::int AS count
       FROM demo_appointments a
       WHERE a.session_id IN (
         SELECT DISTINCT session_id FROM demo_chat_messages
-        WHERE ${sinceSql} ${indClause}
+        WHERE TRUE ${since(Prisma.raw('created_at'))} ${byInd(Prisma.raw('industry_slug'))}
       )
-      ${days ? `AND a.created_at >= now() - interval '${days} days'` : ''}
+      ${since(Prisma.raw('a.created_at'))}
       GROUP BY a.service ORDER BY count DESC LIMIT 8
     `);
 
-    const daily = await this.prisma.$queryRawUnsafe<any[]>(`
+    const daily = await this.prisma.$queryRaw<any[]>(Prisma.sql`
       SELECT to_char(date_trunc('day', created_at), 'YYYY-MM-DD') AS day,
              COUNT(*)::int AS messages,
              COUNT(DISTINCT session_id)::int AS sessions
       FROM demo_chat_messages
-      WHERE created_at >= now() - interval '${days || 14} days' ${indClause}
+      WHERE created_at >= now() - make_interval(days => ${dailyDays})
+            ${byInd(Prisma.raw('industry_slug'))}
       GROUP BY 1 ORDER BY 1
     `);
 
-    const recent = await this.prisma.$queryRawUnsafe<any[]>(`
-      SELECT session_id, industry_name, user_message, assistant_message,
+    // Only short snippets of conversation content are exposed (not full text).
+    const recent = await this.prisma.$queryRaw<any[]>(Prisma.sql`
+      SELECT session_id, industry_name,
+             left(user_message, 160) AS user_message,
+             left(assistant_message, 200) AS assistant_message,
              tool_calls, to_char(created_at,'YYYY-MM-DD HH24:MI') AS at
       FROM demo_chat_messages
-      WHERE ${sinceSql} ${indClause}
+      WHERE TRUE ${since(Prisma.raw('created_at'))} ${byInd(Prisma.raw('industry_slug'))}
       ORDER BY created_at DESC LIMIT 12
     `);
 
@@ -205,11 +217,6 @@ export class DemoService {
       daily,
       recent,
     };
-  }
-
-  // Single-quote-escape a string for safe inline SQL literal use.
-  private q(s: string): string {
-    return `'${String(s).replace(/'/g, "''")}'`;
   }
 
   private async sendConfirmation(
