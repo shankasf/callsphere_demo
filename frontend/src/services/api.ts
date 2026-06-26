@@ -216,8 +216,8 @@ export const authApi = {
 // =====================================================
 
 export const dashboardApi = {
-  getOverview: async (range = '7d'): Promise<{ metrics: OverviewMetrics }> => {
-    const res = await api.get(`/dashboard/overview?range=${range}`);
+  getOverview: async (range = '7d', industry = 'all'): Promise<{ metrics: OverviewMetrics }> => {
+    const res = await api.get(`/dashboard/overview?range=${range}&industry=${encodeURIComponent(industry)}`);
     return res.data;
   },
 
@@ -226,8 +226,8 @@ export const dashboardApi = {
     return res.data;
   },
 
-  getCalls: async (range = '7d'): Promise<{ metrics: CallMetrics; calls: CallLog[] }> => {
-    const res = await api.get(`/dashboard/calls?range=${range}`);
+  getCalls: async (range = '7d', industry = 'all'): Promise<{ metrics: CallMetrics; calls: CallLog[] }> => {
+    const res = await api.get(`/dashboard/calls?range=${range}&industry=${encodeURIComponent(industry)}`);
     return res.data;
   },
 
@@ -276,8 +276,8 @@ export const dashboardApi = {
     return res.data;
   },
 
-  getAnalyticsMetrics: async (range = '7d'): Promise<any> => {
-    const res = await api.get(`/dashboard/analytics?range=${range}`);
+  getAnalyticsMetrics: async (range = '7d', industry = 'all'): Promise<any> => {
+    const res = await api.get(`/dashboard/analytics?range=${range}&industry=${encodeURIComponent(industry)}`);
     return res.data;
   },
 

@@ -290,6 +290,42 @@ async def webrtc_execute_tool(request: VoiceToolRequest):
     return {"output": output}
 
 
+class VoiceTranscriptRequest(BaseModel):
+    """A single transcript turn relayed from the browser WebRTC voice session.
+
+    The browser talks directly to OpenAI Realtime, so the server never sees the
+    audio/transcript otherwise — this relays each finalized turn back so it
+    lands in the session's conversation history and the saved call log."""
+    session_id: str
+    role: str  # 'user' | 'assistant'
+    content: str
+
+
+@app.post("/webrtc/transcript")
+async def webrtc_transcript(request: VoiceTranscriptRequest):
+    """Append a browser-side transcript turn to its voice session so it is
+    persisted in the call log transcript (and pushed to the live monitor)."""
+    try:
+        from sip_integration.session_manager import get_session_manager
+
+        sm = get_session_manager()
+        session = await sm.get_session(request.session_id)
+        if not session:
+            return {"ok": False, "error": "session_not_found"}
+        role = "user" if request.role == "user" else "assistant"
+        content = (request.content or "").strip()
+        if content:
+            session.add_message(role, content)
+            try:
+                await sm.notify_transcript_update(request.session_id, role, content)
+            except Exception:
+                pass
+        return {"ok": True}
+    except Exception as e:
+        logger.warning(f"webrtc transcript relay failed: {e}")
+        return {"ok": False, "error": "relay_failed"}
+
+
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     """

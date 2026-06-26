@@ -12,8 +12,8 @@ export class DashboardController {
 
   @Get('overview')
   @ApiOperation({ summary: 'Get dashboard overview stats' })
-  async getOverview() {
-    return this.dashboardService.getOverview();
+  async getOverview(@Query('industry') industry?: string) {
+    return this.dashboardService.getOverview(industry);
   }
 
   @Get('devices')
@@ -26,8 +26,11 @@ export class DashboardController {
   @Get('calls')
   @ApiOperation({ summary: 'Get call metrics and logs' })
   @ApiQuery({ name: 'range', required: false, enum: ['today', '7d', '30d', '90d'] })
-  async getCalls(@Query('range') range?: string) {
-    return this.dashboardService.getCallMetrics(range);
+  async getCalls(
+    @Query('range') range?: string,
+    @Query('industry') industry?: string,
+  ) {
+    return this.dashboardService.getCallMetrics(range, industry);
   }
 
   @Get('tickets')
@@ -91,8 +94,11 @@ export class DashboardController {
   @Get('analytics')
   @ApiOperation({ summary: 'Get business analytics metrics' })
   @ApiQuery({ name: 'range', required: false, enum: ['today', '7d', '30d', '90d'] })
-  async getAnalyticsMetrics(@Query('range') range?: string) {
-    return this.dashboardService.getAnalyticsMetrics(range);
+  async getAnalyticsMetrics(
+    @Query('range') range?: string,
+    @Query('industry') industry?: string,
+  ) {
+    return this.dashboardService.getAnalyticsMetrics(range, industry);
   }
 
   @Get('compliance')

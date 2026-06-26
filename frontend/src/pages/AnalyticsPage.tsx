@@ -15,9 +15,12 @@ import {
     TrendingUp,
 } from 'lucide-react';
 import { dashboardApi } from '../services/api';
+import { useIndustry } from '../context';
 
 
 export function AnalyticsPage() {
+    const { slug } = useIndustry();
+    const industryFilter = slug ?? 'all';
     const [data, setData] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
@@ -26,7 +29,7 @@ export function AnalyticsPage() {
     // Fetch analytics from API
     const fetchData = useCallback(async () => {
         try {
-            const response = await dashboardApi.getAnalyticsMetrics(timeRange);
+            const response = await dashboardApi.getAnalyticsMetrics(timeRange, industryFilter);
             if (response) {
                 setData(response);
                 setLastRefresh(new Date());
@@ -36,7 +39,7 @@ export function AnalyticsPage() {
         } finally {
             setIsLoading(false);
         }
-    }, [timeRange]);
+    }, [timeRange, industryFilter]);
 
     // Initial fetch and periodic refresh
     useEffect(() => {

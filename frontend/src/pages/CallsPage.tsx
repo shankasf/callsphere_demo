@@ -4,6 +4,7 @@ import { DashboardLayout } from '../components/layout';
 import { MetricCard, Card, LoadingSpinner, EmptyState } from '../components/common';
 import { HourlyCallsChart, AgentDistributionChart, CostTrendChart } from '../components/dashboard/Charts';
 import { dashboardApi, callsApi } from '../services/api';
+import { useIndustry } from '../context';
 import { wsService } from '../services/websocket';
 import { Phone, PhoneIncoming, PhoneOutgoing, Clock, CheckCircle, XCircle, AlertCircle, RefreshCw, X, FileText, ChevronRight } from 'lucide-react';
 
@@ -37,6 +38,8 @@ function turnLabel(role: string): { label: string; className: string } {
 
 export function CallsPage() {
     const queryClient = useQueryClient();
+    const { slug } = useIndustry();
+    const industryFilter = slug ?? 'all';
     const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
     const [expandedLive, setExpandedLive] = useState<string | null>(null);
     // Completed call selected for the right-side transcript panel.
@@ -49,8 +52,8 @@ export function CallsPage() {
     });
 
     const { data: calls, isLoading, refetch } = useQuery({
-        queryKey: ['dashboard-calls'],
-        queryFn: () => dashboardApi.getCalls(),
+        queryKey: ['dashboard-calls', industryFilter],
+        queryFn: () => dashboardApi.getCalls('7d', industryFilter),
     });
 
     // Live (in-progress) calls — caller phone numbers come from Twilio's `From`

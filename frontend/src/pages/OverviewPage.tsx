@@ -64,8 +64,8 @@ export function OverviewPage() {
         refetch: refetchCalls,
         isFetching: fetchingCalls,
     } = useQuery({
-        queryKey: ['overview-calls'],
-        queryFn: () => dashboardApi.getCalls(),
+        queryKey: ['overview-calls', industryFilter],
+        queryFn: () => dashboardApi.getCalls('7d', industryFilter),
     });
 
     // Lead / pipeline intelligence (leads, score, profit, hot/warm/cold, by-industry).

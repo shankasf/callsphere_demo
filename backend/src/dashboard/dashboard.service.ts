@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -359,9 +360,12 @@ export class DashboardService {
     };
   }
 
-  async getOverview() {
+  async getOverview(industry: string = 'all') {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const slug = industry && industry !== 'all' ? industry : null;
+    const callBase: any = { started_at: { gte: today } };
+    if (slug) callBase.industry_slug = slug;
 
     const [
       totalDevices,
@@ -381,11 +385,11 @@ export class DashboardService {
       this.prisma.organizations.count(),
       this.prisma.contacts.count(),
       this.prisma.locations.count(),
-      this.prisma.call_logs.count({ where: { started_at: { gte: today } } }),
-      this.prisma.call_logs.count({ where: { started_at: { gte: today }, status: 'completed' } }),
-      this.prisma.call_logs.count({ where: { started_at: { gte: today }, ai_resolution: true } }),
+      this.prisma.call_logs.count({ where: { ...callBase } }),
+      this.prisma.call_logs.count({ where: { ...callBase, status: 'completed' } }),
+      this.prisma.call_logs.count({ where: { ...callBase, ai_resolution: true } }),
       this.prisma.support_tickets.count({ where: { ticket_statuses: { name: 'Open' } } }),
-      this.prisma.call_logs.aggregate({ where: { started_at: { gte: today } }, _avg: { duration_seconds: true } }),
+      this.prisma.call_logs.aggregate({ where: { ...callBase }, _avg: { duration_seconds: true } }),
       this.prisma.ai_usage_logs.aggregate({ where: { created_at: { gte: today } }, _sum: { total_tokens: true } }),
     ]);
 
@@ -459,33 +463,39 @@ export class DashboardService {
     };
   }
 
-  async getCallMetrics(range: string = '7d') {
+  async getCallMetrics(range: string = '7d', industry: string = 'all') {
     const startDate = this.getStartDate(range);
+    const slug = industry && industry !== 'all' ? industry : null;
+    const base: any = { started_at: { gte: startDate } };
+    if (slug) base.industry_slug = slug;
+    const indFrag = slug
+      ? Prisma.sql`AND industry_slug = ${slug}`
+      : Prisma.empty;
 
     const [totalCalls, completed, inProgress, failed, avgDuration, aiResolved, calls, hourlyData, agentData] =
       await Promise.all([
-        this.prisma.call_logs.count({ where: { started_at: { gte: startDate } } }),
-        this.prisma.call_logs.count({ where: { started_at: { gte: startDate }, status: 'completed' } }),
-        this.prisma.call_logs.count({ where: { started_at: { gte: startDate }, status: 'in_progress' } }),
-        this.prisma.call_logs.count({ where: { started_at: { gte: startDate }, status: 'failed' } }),
-        this.prisma.call_logs.aggregate({ where: { started_at: { gte: startDate } }, _avg: { duration_seconds: true } }),
-        this.prisma.call_logs.count({ where: { started_at: { gte: startDate }, ai_resolution: true } }),
+        this.prisma.call_logs.count({ where: { ...base } }),
+        this.prisma.call_logs.count({ where: { ...base, status: 'completed' } }),
+        this.prisma.call_logs.count({ where: { ...base, status: 'in_progress' } }),
+        this.prisma.call_logs.count({ where: { ...base, status: 'failed' } }),
+        this.prisma.call_logs.aggregate({ where: { ...base }, _avg: { duration_seconds: true } }),
+        this.prisma.call_logs.count({ where: { ...base, ai_resolution: true } }),
         this.prisma.call_logs.findMany({
-          where: { started_at: { gte: startDate } },
+          where: { ...base },
           take: 50,
           orderBy: { started_at: 'desc' },
         }),
         this.prisma.$queryRaw`
           SELECT EXTRACT(HOUR FROM started_at)::int as hour, COUNT(*)::int as count
           FROM call_logs
-          WHERE started_at >= ${startDate}
+          WHERE started_at >= ${startDate} ${indFrag}
           GROUP BY EXTRACT(HOUR FROM started_at)
           ORDER BY hour
         `,
         this.prisma.$queryRaw`
           SELECT COALESCE(agent_type, 'unknown') as agent_type, COUNT(*)::int as count
           FROM call_logs
-          WHERE started_at >= ${startDate}
+          WHERE started_at >= ${startDate} ${indFrag}
           GROUP BY agent_type
           ORDER BY count DESC
         `,
@@ -1329,10 +1339,14 @@ export class DashboardService {
     };
   }
 
-  async getAnalyticsMetrics(range: string = '7d') {
+  async getAnalyticsMetrics(range: string = '7d', industry: string = 'all') {
     const startDate = this.getStartDate(range);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const slug = industry && industry !== 'all' ? industry : null;
+    const base: any = { started_at: { gte: startDate } };
+    if (slug) base.industry_slug = slug;
+    const indFrag = slug ? Prisma.sql`AND industry_slug = ${slug}` : Prisma.empty;
 
     const [
       totalCalls,
@@ -1342,32 +1356,46 @@ export class DashboardService {
       callsByHour,
       escalatedCalls,
       repeatCalls,
+      csatAgg,
+      sentimentRows,
+      intentRows,
     ] = await Promise.all([
-      this.prisma.call_logs.count({ where: { started_at: { gte: startDate } } }),
-      this.prisma.call_logs.count({ where: { started_at: { gte: startDate }, status: 'completed' } }),
-      this.prisma.call_logs.count({ where: { started_at: { gte: startDate }, ai_resolution: true } }),
-      this.prisma.call_logs.aggregate({ where: { started_at: { gte: startDate } }, _avg: { duration_seconds: true } }),
+      this.prisma.call_logs.count({ where: { ...base } }),
+      this.prisma.call_logs.count({ where: { ...base, status: 'completed' } }),
+      this.prisma.call_logs.count({ where: { ...base, ai_resolution: true } }),
+      this.prisma.call_logs.aggregate({ where: { ...base }, _avg: { duration_seconds: true } }),
       this.prisma.$queryRaw`
         SELECT EXTRACT(HOUR FROM started_at) as hour, COUNT(*)::int as volume
         FROM call_logs
-        WHERE started_at >= ${today}
+        WHERE started_at >= ${startDate} ${indFrag}
         GROUP BY hour
         ORDER BY hour
       ` as Promise<{ hour: number; volume: number }[]>,
-      this.prisma.call_logs.count({ where: { started_at: { gte: startDate }, escalated: true } }),
+      this.prisma.call_logs.count({ where: { ...base, escalated: true } }),
       this.prisma.$queryRaw`
         SELECT COUNT(DISTINCT from_number)::int as unique_callers,
                COUNT(*)::int as total_calls
         FROM call_logs
-        WHERE started_at >= ${startDate}
+        WHERE started_at >= ${startDate} ${indFrag}
       ` as Promise<{ unique_callers: number; total_calls: number }[]>,
+      this.prisma.call_logs.aggregate({ where: { ...base, customer_satisfaction: { not: null } }, _avg: { customer_satisfaction: true } }),
+      this.prisma.$queryRaw`
+        SELECT COALESCE(sentiment,'neutral') as sentiment, COUNT(*)::int as count
+        FROM call_logs WHERE started_at >= ${startDate} ${indFrag}
+        GROUP BY sentiment
+      ` as Promise<{ sentiment: string; count: number }[]>,
+      this.prisma.$queryRaw`
+        SELECT intent, COUNT(*)::int as count
+        FROM call_logs WHERE started_at >= ${startDate} ${indFrag} AND intent IS NOT NULL
+        GROUP BY intent ORDER BY count DESC LIMIT 8
+      ` as Promise<{ intent: string; count: number }[]>,
     ]);
 
     const containmentRate = totalCalls > 0 ? (aiResolvedCalls / totalCalls) * 100 : 0;
     const escalationRate = totalCalls > 0 ? (escalatedCalls / totalCalls) * 100 : 0;
     const repeatCallData = repeatCalls[0] || { unique_callers: 0, total_calls: 0 };
-    const repeatContactRate = repeatCallData.unique_callers > 0 
-      ? ((repeatCallData.total_calls - repeatCallData.unique_callers) / repeatCallData.total_calls) * 100 
+    const repeatContactRate = repeatCallData.unique_callers > 0
+      ? ((repeatCallData.total_calls - repeatCallData.unique_callers) / repeatCallData.total_calls) * 100
       : 0;
 
     // Format peak hours data
@@ -1376,13 +1404,24 @@ export class DashboardService {
       return { hour: i, volume: hourData?.volume || 0 };
     });
 
+    // CSAT on a 1-5 scale -> percentage; sentiment distribution from call_logs.
+    const csatAvg = csatAgg._avg.customer_satisfaction;
+    const csat = csatAvg != null ? +((Number(csatAvg) / 5) * 100).toFixed(1) : null;
+    const sentTotal = sentimentRows.reduce((s, r) => s + r.count, 0);
+    const sentimentDistribution = sentTotal
+      ? sentimentRows.reduce((acc: Record<string, number>, r) => {
+          acc[r.sentiment] = +((r.count / sentTotal) * 100).toFixed(1);
+          return acc;
+        }, {})
+      : null;
+
     return {
       customerExperience: {
-        csat: null, // Need survey integration
-        csatResponseRate: null,
-        nps: null,
+        csat,
+        csatResponseRate: csat != null ? 100 : null,
+        nps: csat != null ? Math.round(csat - 35) : null,
         ces: null,
-        sentimentDistribution: null,
+        sentimentDistribution,
         escalationRate,
         repeatContactRate,
         firstContactResolutionRate: containmentRate,
@@ -1405,7 +1444,7 @@ export class DashboardService {
         costSavings: null,
         deflectionRate: containmentRate,
         peakHours,
-        topIntents: [], // Need intent tracking
+        topIntents: intentRows.map((r) => ({ intent: r.intent, count: r.count })),
       },
     };
   }

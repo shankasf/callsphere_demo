@@ -109,6 +109,29 @@ export class VoiceController {
     }
   }
 
+  // Browser relays each finalized voice transcript turn here so it lands in the
+  // session's call-log transcript (the browser talks directly to OpenAI).
+  @Post('webrtc/transcript')
+  @ApiOperation({ summary: 'Relay a browser voice transcript turn to the session' })
+  async relayTranscript(@Body() body: any): Promise<any> {
+    const aiServiceUrl = this.configService.get('AI_SERVICE_URL') || 'http://localhost:8081';
+    try {
+      const response = await fetch(`${aiServiceUrl}/webrtc/transcript`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: body?.sessionId ?? body?.session_id,
+          role: body?.role,
+          content: body?.content,
+        }),
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('Transcript relay error:', error);
+      return { ok: false };
+    }
+  }
+
   @Post('webrtc/disconnect')
   @ApiOperation({ summary: 'Disconnect WebRTC voice session' })
   @ApiBody({

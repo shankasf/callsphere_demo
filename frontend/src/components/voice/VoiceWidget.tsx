@@ -85,6 +85,19 @@ export function VoiceWidget({ overrideRole }: VoiceWidgetProps) {
         }]);
     }, []);
 
+    // Relay each finalized transcript turn to the server so it is saved in the
+    // call-log transcript (browser talks directly to OpenAI Realtime).
+    const relayTranscript = useCallback((role: 'user' | 'assistant', content: string) => {
+        const sid = sessionIdRef.current;
+        if (!sid || !content) return;
+        const base = window.location.origin.replace(':5173', ':8001');
+        fetch(`${base}/api/voice/webrtc/transcript`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: sid, role, content }),
+        }).catch(() => {});
+    }, []);
+
     const startCall = async () => {
         if (!voicePermissions.canInitiateCall) {
             setError('You do not have permission to initiate calls');
@@ -165,6 +178,7 @@ export function VoiceWidget({ overrideRole }: VoiceWidgetProps) {
                         event.transcript
                     ) {
                         addMessage('assistant', event.transcript);
+                        relayTranscript('assistant', event.transcript);
                     }
                     // User transcript (gpt-realtime-whisper input transcription).
                     if (
@@ -172,6 +186,7 @@ export function VoiceWidget({ overrideRole }: VoiceWidgetProps) {
                         event.transcript
                     ) {
                         addMessage('user', event.transcript);
+                        relayTranscript('user', event.transcript);
                     }
                     // Realtime function call: run it server-side, feed the result back.
                     if (
