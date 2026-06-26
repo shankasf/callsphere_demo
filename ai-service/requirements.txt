@@ -1,0 +1,35 @@
+# URackIT AI Service - Python Dependencies
+# Core
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-dotenv==1.0.1
+pydantic==2.10.3
+pydantic-settings==2.7.0
+
+# OpenAI Python SDK — pinned to a 2026 release that supports the Responses API
+# (client.responses.create) and the gpt-5.5 / gpt-realtime-2 models used here.
+openai==2.43.0
+
+# OpenAI Agents SDK. NOTE: the actual request path uses the in-repo `agents/`
+# shim (see agents/pipeline.py), which now calls the Responses API directly.
+# 0.0.15 is kept deliberately: newer releases (0.1.x+) reorganized the public
+# API and the installed package is shadowed by the local `agents/` dir anyway.
+# Its only hard constraint is openai>=1.76.0, satisfied by the pin above.
+openai-agents==0.0.15
+
+# Database
+psycopg2-binary==2.9.10
+pgvector==0.3.6
+
+# Knowledge base embeddings use the OpenAI embeddings API directly (no local
+# model), so sentence-transformers/torch is intentionally NOT a dependency.
+
+# HTTP Clients
+requests==2.32.3
+aiohttp==3.10.11
+
+# WebSocket Support
+websockets==14.1
+
+# Twilio SIP Integration
+twilio==9.4.1

@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Environment variables (credentials)
+.env
+.env.local
+!.env.example
+
+# Build output
+dist/
+build/
+
+# Generated Prisma client
+generated/
+/generated/prisma
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Test coverage
+coverage/
+
+# OS files
+.DS_Store
+Thumbs.db

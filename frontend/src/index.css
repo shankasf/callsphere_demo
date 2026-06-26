@@ -1,0 +1,142 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* CallSphere Demo brand accent — teal. Used sparingly, functionally. */
+  --color-primary-50: #f0fdfa;
+  --color-primary-100: #ccfbf1;
+  --color-primary-200: #99f6e4;
+  --color-primary-300: #5eead4;
+  --color-primary-400: #2dd4bf;
+  --color-primary-500: #14b8a6;
+  --color-primary-600: #0d9488;
+  --color-primary-700: #0f766e;
+  --color-primary-800: #115e59;
+  --color-primary-900: #134e4a;
+
+  /* Refined neutral slate scale. dark-950/925/900 are the layered backgrounds. */
+  --color-dark-50: #f8fafc;
+  --color-dark-100: #e9eef5;
+  --color-dark-200: #cbd5e1;
+  --color-dark-300: #94a3b8;
+  --color-dark-400: #64748b;
+  --color-dark-500: #475569;
+  --color-dark-600: #334155;
+  --color-dark-700: #1e293b;
+  --color-dark-800: #161e2e;
+  --color-dark-900: #111827;
+  --color-dark-925: #0d131f;
+  --color-dark-950: #0a0f1a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--font-sans);
+}
+
+body {
+  background-color: #0a0f1a;
+  color: #e9eef5;
+  min-height: 100vh;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+/* ----------------------------------------------------------------------------
+   Surfaces — flat, layered slate cards with a hairline border and a whisper of
+   elevation. Replaces the old neon glassmorphism blur. `.glass` is kept as an
+   alias so existing pages stay visually consistent without edits.
+---------------------------------------------------------------------------- */
+.surface,
+.glass {
+  background-color: rgba(17, 24, 39, 0.6);
+  border: 1px solid rgba(30, 41, 59, 0.9);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+/* A slightly lighter inset panel for nested blocks inside a surface. */
+.panel {
+  background-color: rgba(13, 19, 31, 0.7);
+  border: 1px solid rgba(30, 41, 59, 0.7);
+}
+
+/* Subtle interactive lift for clickable surfaces — no translate gimmick. */
+.surface-hover {
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.surface-hover:hover {
+  border-color: rgba(45, 212, 191, 0.35);
+  background-color: rgba(17, 24, 39, 0.85);
+}
+
+/* Kept for backwards compatibility; now a no-op lift, just a border accent. */
+.metric-card {
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.metric-card:hover {
+  border-color: rgba(45, 212, 191, 0.3);
+}
+
+/* Tabular numerals for metric values and any aligned figures. */
+.tabular,
+.metric-value {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+.metric-value {
+  letter-spacing: -0.02em;
+}
+
+/* Small, muted, uppercase-tracked label. */
+.metric-label {
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+  font-weight: 500;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #334155; }
+
+.custom-scrollbar::-webkit-scrollbar { width: 4px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: #0d131f; border-radius: 4px; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #334155; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-in { animation: fadeIn 0.25s ease-out; }
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.slide-in-right { animation: slideInRight 0.25s ease-out; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+.pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

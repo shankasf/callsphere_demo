@@ -1,0 +1,75 @@
+# CallSphere Demo backend: NestJS API + socket.io (/events) + serves the React dashboard build.
+# Source runs straight off the hostPath repo (no image build), same pattern as
+# perspire_sauna / prior_auth. Deps + build happen on first start and persist on disk.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-backend
+  namespace: demo
+  labels:
+    app: demo
+    tier: backend
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: demo
+      tier: backend
+  template:
+    metadata:
+      labels:
+        app: demo
+        tier: backend
+    spec:
+      containers:
+        - name: backend
+          image: node:20-bookworm
+          imagePullPolicy: IfNotPresent
+          workingDir: /app/backend
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              if [ ! -d node_modules ]; then
+                echo "[backend] installing deps..."; npm install --include=dev
+              fi
+              echo "[backend] prisma generate..."; npx prisma generate
+              if [ ! -f dist/src/main.js ]; then
+                echo "[backend] building..."; npm run build
+              fi
+              echo "[backend] starting..."; exec node dist/src/main.js
+          envFrom:
+            - configMapRef: { name: demo-config }
+            - secretRef: { name: demo-app-secrets }
+          ports:
+            - containerPort: 3003
+          readinessProbe:
+            httpGet: { path: /, port: 3003 }
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 30
+          volumeMounts:
+            - name: app-source
+              mountPath: /app
+      volumes:
+        - name: app-source
+          hostPath:
+            path: /home/ubuntu/apps/demo
+            type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-backend
+  namespace: demo
+spec:
+  selector:
+    app: demo
+    tier: backend
+  ports:
+    - name: http
+      port: 3003
+      targetPort: 3003

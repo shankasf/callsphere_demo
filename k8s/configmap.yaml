@@ -1,0 +1,29 @@
+# Non-secret runtime config shared by the CallSphere Demo backend + ai-service pods.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: demo-config
+  namespace: demo
+data:
+  # Backend (NestJS)
+  NODE_ENV: "production"
+  PORT: "3003"
+  AI_SERVICE_URL: "http://demo-ai:8081"
+
+  # AI service (FastAPI / OpenAI Realtime)
+  HOST: "0.0.0.0"
+  DEBUG: "false"
+  # Text agent (chat + lead/profit scoring) — GPT-5.5 via the Responses API (latest as of 2026-06-22).
+  OPENAI_MODEL: "gpt-5.5"
+  OPENAI_REASONING_EFFORT: "low"
+  # Latest realtime speech-to-speech voice model (GPT-5-class reasoning, 128k ctx).
+  OPENAI_REALTIME_MODEL: "gpt-realtime-2"
+  OPENAI_REALTIME_REASONING_EFFORT: "low"
+  # Low-latency streaming STT for live-call transcripts (input_audio_transcription).
+  OPENAI_TRANSCRIPTION_MODEL: "gpt-realtime-whisper"
+  VOICE: "alloy"
+  MAX_SESSIONS: "100"
+  # Public origin Twilio dials back into for media streams (wss://.../media-stream/..)
+  WEBHOOK_BASE_URL: "https://demo.callsphere.site"
+  # Internal cluster URL the ai-service posts live call events to (dashboard updates)
+  BACKEND_URL: "http://demo-backend:3003"

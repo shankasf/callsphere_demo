@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>U Rack IT - AI Voice Agent</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(14px);
+            border-radius: 24px;
+            padding: 48px 36px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+            max-width: 420px;
+            width: 92%;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        h1 {
+            font-size: 1.7rem;
+            margin-bottom: 6px;
+            letter-spacing: -0.5px;
+        }
+
+        .subtitle {
+            color: rgba(255, 255, 255, 0.65);
+            margin-bottom: 32px;
+            font-size: 0.9rem;
+        }
+
+        .status-bar {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 36px;
+            padding: 10px 18px;
+            background: rgba(0, 0, 0, 0.25);
+            border-radius: 999px;
+            font-size: 0.85rem;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #666;
+            transition: background 0.3s;
+        }
+        .status-dot.ready     { background: #4ade80; box-shadow: 0 0 10px #4ade80; }
+        .status-dot.connecting{ background: #fbbf24; animation: pulse 1s infinite; }
+        .status-dot.oncall    { background: #f87171; animation: pulse 1.4s infinite; }
+        .status-dot.error     { background: #ef4444; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50%      { opacity: 0.4; }
+        }
+
+        .call-btn-wrap {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 24px;
+        }
+
+        .call-btn {
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            font-size: 3.2rem;
+            color: #fff;
+            transition: transform 0.18s, box-shadow 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .call-btn.idle {
+            background: linear-gradient(135deg, #4ade80, #16a34a);
+            box-shadow: 0 8px 24px rgba(74, 222, 128, 0.35);
+        }
+        .call-btn.idle:hover    { transform: scale(1.05); box-shadow: 0 12px 30px rgba(74, 222, 128, 0.55); }
+        .call-btn.idle:active   { transform: scale(0.97); }
+
+        .call-btn.active {
+            background: linear-gradient(135deg, #f87171, #dc2626);
+            box-shadow: 0 8px 24px rgba(239, 68, 68, 0.45);
+            animation: ring 2.2s infinite;
+        }
+        .call-btn.active:hover  { transform: scale(1.05); }
+        .call-btn.active:active { transform: scale(0.97); }
+
+        .call-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            animation: none;
+        }
+
+        @keyframes ring {
+            0%, 100% { box-shadow: 0 8px 24px rgba(239, 68, 68, 0.45), 0 0 0 0   rgba(239, 68, 68, 0.55); }
+            70%      { box-shadow: 0 8px 24px rgba(239, 68, 68, 0.45), 0 0 0 24px rgba(239, 68, 68, 0); }
+        }
+
+        .call-timer {
+            font-size: 2rem;
+            font-weight: 300;
+            font-family: 'SF Mono', 'Menlo', 'Courier New', monospace;
+            letter-spacing: 2px;
+            margin-bottom: 14px;
+            color: rgba(255, 255, 255, 0.95);
+            min-height: 2.4rem;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .ctrl-btn {
+            padding: 12px 18px;
+            font-size: 0.9rem;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.08);
+            color: #fff;
+            border-radius: 999px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.2s, border-color 0.2s;
+        }
+        .ctrl-btn:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.16);
+            border-color: rgba(255, 255, 255, 0.35);
+        }
+        .ctrl-btn.muted {
+            background: rgba(251, 191, 36, 0.18);
+            border-color: rgba(251, 191, 36, 0.6);
+            color: #fbbf24;
+        }
+        .ctrl-btn:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+
+        .hint {
+            margin-top: 28px;
+            color: rgba(255, 255, 255, 0.45);
+            font-size: 0.78rem;
+            line-height: 1.5;
+        }
+
+        .error-message {
+            margin-top: 18px;
+            padding: 12px;
+            background: rgba(239, 68, 68, 0.18);
+            border: 1px solid rgba(239, 68, 68, 0.5);
+            border-radius: 10px;
+            color: #fca5a5;
+            font-size: 0.85rem;
+            display: none;
+        }
+        .error-message.visible { display: block; }
+
+        .level-meter {
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            gap: 4px;
+            height: 30px;
+            margin-bottom: 16px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .level-meter.visible { opacity: 1; }
+        .level-bar {
+            width: 4px;
+            height: 4px;
+            background: #4ade80;
+            border-radius: 2px;
+            transition: height 0.08s ease-out;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛠️ U Rack IT</h1>
+        <p class="subtitle">AI Voice Agent &mdash; Direct WebRTC</p>
+
+        <div class="status-bar">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">Ready</span>
+        </div>
+
+        <div class="call-timer" id="callTimer">&mdash;&mdash;:&mdash;&mdash;</div>
+
+        <div class="level-meter" id="levelMeter">
+            <div class="level-bar"></div><div class="level-bar"></div><div class="level-bar"></div>
+            <div class="level-bar"></div><div class="level-bar"></div><div class="level-bar"></div>
+            <div class="level-bar"></div><div class="level-bar"></div><div class="level-bar"></div>
+            <div class="level-bar"></div><div class="level-bar"></div><div class="level-bar"></div>
+        </div>
+
+        <div class="call-btn-wrap">
+            <button class="call-btn idle" id="callBtn" aria-label="Start call">📞</button>
+        </div>
+
+        <div class="controls">
+            <button class="ctrl-btn" id="muteBtn" disabled>
+                <span id="muteIcon">🎤</span> <span id="muteLabel">Mute</span>
+            </button>
+        </div>
+
+        <div class="error-message" id="errorMessage"></div>
+
+        <p class="hint">
+            Click the green button to speak with the U Rack IT support agent.<br>
+            Direct browser&rarr;AI &mdash; no phone network.
+        </p>
+
+        <!-- Hidden audio element for AI agent's voice -->
+        <audio id="aiAudio" autoplay playsinline></audio>
+    </div>
+
+    <script>
+        const CONNECT_URL    = '/webrtc/connect';
+        const DISCONNECT_URL = '/webrtc/disconnect';
+        const REALTIME_MODEL = 'gpt-4o-realtime-preview-2024-12-17';
+
+        // State
+        let pc            = null;   // RTCPeerConnection
+        let localStream   = null;   // MediaStream from getUserMedia
+        let sessionId     = null;   // returned by /webrtc/connect
+        let callStartTime = null;
+        let timerInterval = null;
+        let audioContext  = null;
+        let analyser      = null;
+        let levelRAF      = null;
+
+        // DOM
+        const statusDot    = document.getElementById('statusDot');
+        const statusText   = document.getElementById('statusText');
+        const callBtn      = document.getElementById('callBtn');
+        const muteBtn      = document.getElementById('muteBtn');
+        const muteIcon     = document.getElementById('muteIcon');
+        const muteLabel    = document.getElementById('muteLabel');
+        const callTimer    = document.getElementById('callTimer');
+        const errorMessage = document.getElementById('errorMessage');
+        const aiAudio      = document.getElementById('aiAudio');
+        const levelMeter   = document.getElementById('levelMeter');
+        const levelBars    = levelMeter.querySelectorAll('.level-bar');
+
+        // ─── Status helpers ──────────────────────────────────
+        function setStatus(state, text) {
+            statusDot.className = 'status-dot ' + state;
+            statusText.textContent = text;
+        }
+        function setError(msg) {
+            errorMessage.textContent = msg;
+            errorMessage.classList.add('visible');
+            setStatus('error', 'Error');
+        }
+        function clearError() {
+            errorMessage.classList.remove('visible');
+        }
+
+        // ─── Timer ──────────────────────────────────────────
+        function startTimer() {
+            callStartTime = Date.now();
+            timerInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - callStartTime) / 1000);
+                const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+                const s = String(elapsed % 60).padStart(2, '0');
+                callTimer.textContent = `${m}:${s}`;
+            }, 250);
+        }
+        function stopTimer() {
+            if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+            callTimer.innerHTML = '&mdash;&mdash;:&mdash;&mdash;';
+        }
+
+        // ─── Mic-level meter ────────────────────────────────
+        function startLevelMeter(stream) {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const source = audioContext.createMediaStreamSource(stream);
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 64;
+                source.connect(analyser);
+                const data = new Uint8Array(analyser.frequencyBinCount);
+                levelMeter.classList.add('visible');
+
+                const tick = () => {
+                    analyser.getByteFrequencyData(data);
+                    levelBars.forEach((bar, i) => {
+                        const v = data[i + 2] || 0;          // skip lowest bins
+                        const height = Math.max(4, Math.min(30, (v / 255) * 30));
+                        bar.style.height = height + 'px';
+                    });
+                    levelRAF = requestAnimationFrame(tick);
+                };
+                tick();
+            } catch (e) {
+                console.warn('Level meter unavailable:', e);
+            }
+        }
+        function stopLevelMeter() {
+            if (levelRAF) cancelAnimationFrame(levelRAF);
+            levelRAF = null;
+            if (audioContext) {
+                audioContext.close().catch(() => {});
+                audioContext = null;
+            }
+            analyser = null;
+            levelMeter.classList.remove('visible');
+            levelBars.forEach(b => b.style.height = '4px');
+        }
+
+        // ─── Call control ───────────────────────────────────
+        async function startCall() {
+            clearError();
+            setStatus('connecting', 'Requesting microphone…');
+            callBtn.disabled = true;
+
+            try {
+                // 1. Mic permission
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl:  true,
+                    },
+                    video: false,
+                });
+                startLevelMeter(localStream);
+
+                // 2. Peer connection
+                setStatus('connecting', 'Connecting to AI agent…');
+                pc = new RTCPeerConnection({
+                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+                });
+
+                // Receive audio from OpenAI
+                pc.ontrack = (event) => {
+                    if (event.streams && event.streams[0]) {
+                        aiAudio.srcObject = event.streams[0];
+                    }
+                };
+
+                pc.onconnectionstatechange = () => {
+                    console.log('PC state:', pc.connectionState);
+                    if (pc.connectionState === 'connected') {
+                        setStatus('oncall', 'On call');
+                        startTimer();
+                        muteBtn.disabled = false;
+                    } else if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
+                        if (timerInterval) endCall();
+                    }
+                };
+
+                // Send mic to OpenAI
+                localStream.getAudioTracks().forEach(track => pc.addTrack(track, localStream));
+
+                // 3. SDP offer
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+
+                // 4. POST to backend, which proxies to OpenAI Realtime
+                const resp = await fetch(CONNECT_URL, {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sdp:         offer.sdp,
+                        role:        'requester',
+                        maxDuration: 15,
+                    }),
+                });
+
+                if (!resp.ok) {
+                    const errText = await resp.text();
+                    throw new Error(`Server error (${resp.status}): ${errText}`);
+                }
+
+                const data = await resp.json();
+                sessionId = data.sessionId;
+
+                // 5. Apply SDP answer
+                await pc.setRemoteDescription({ type: 'answer', sdp: data.sdp });
+
+                // Buttons swap once connected (handled by onconnectionstatechange)
+                callBtn.classList.remove('idle');
+                callBtn.classList.add('active');
+                callBtn.innerHTML = '📵';
+                callBtn.setAttribute('aria-label', 'End call');
+                callBtn.disabled = false;
+            } catch (err) {
+                console.error('startCall failed:', err);
+                setError(err.message || String(err));
+                cleanup();
+                resetButton();
+                callBtn.disabled = false;
+            }
+        }
+
+        async function endCall() {
+            callBtn.disabled = true;
+            setStatus('connecting', 'Hanging up…');
+            stopTimer();
+
+            // Best-effort backend notify
+            if (sessionId) {
+                try {
+                    await fetch(DISCONNECT_URL, {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body:    JSON.stringify({ sessionId }),
+                    });
+                } catch (e) { console.warn('Disconnect notify failed:', e); }
+            }
+
+            cleanup();
+            resetButton();
+            setStatus('ready', 'Ready');
+            callBtn.disabled = false;
+        }
+
+        function cleanup() {
+            if (pc) {
+                try { pc.close(); } catch (e) {}
+                pc = null;
+            }
+            if (localStream) {
+                localStream.getTracks().forEach(t => t.stop());
+                localStream = null;
+            }
+            if (aiAudio.srcObject) {
+                aiAudio.srcObject = null;
+            }
+            stopLevelMeter();
+            sessionId = null;
+            muteBtn.disabled = true;
+            // Reset mute state visually
+            muteBtn.classList.remove('muted');
+            muteIcon.textContent = '🎤';
+            muteLabel.textContent = 'Mute';
+        }
+
+        function resetButton() {
+            callBtn.classList.remove('active');
+            callBtn.classList.add('idle');
+            callBtn.innerHTML = '📞';
+            callBtn.setAttribute('aria-label', 'Start call');
+        }
+
+        function toggleMute() {
+            if (!localStream) return;
+            const tracks = localStream.getAudioTracks();
+            if (tracks.length === 0) return;
+            const muted = !tracks[0].enabled === false;  // current state inverted
+            const newEnabled = !tracks[0].enabled;
+            tracks.forEach(t => t.enabled = newEnabled);
+            if (newEnabled) {
+                muteBtn.classList.remove('muted');
+                muteIcon.textContent = '🎤';
+                muteLabel.textContent = 'Mute';
+            } else {
+                muteBtn.classList.add('muted');
+                muteIcon.textContent = '🔇';
+                muteLabel.textContent = 'Unmute';
+            }
+        }
+
+        // ─── Wire up ────────────────────────────────────────
+        callBtn.addEventListener('click', () => {
+            if (callBtn.classList.contains('active')) {
+                endCall();
+            } else {
+                startCall();
+            }
+        });
+        muteBtn.addEventListener('click', toggleMute);
+
+        // Hang up cleanly if user closes tab
+        window.addEventListener('beforeunload', () => {
+            if (sessionId) {
+                navigator.sendBeacon(
+                    DISCONNECT_URL,
+                    new Blob([JSON.stringify({ sessionId })], { type: 'application/json' })
+                );
+            }
+        });
+
+        // Mic capability check
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            setError('Your browser does not support WebRTC microphone access. Please use Chrome, Edge, Firefox, or Safari.');
+            callBtn.disabled = true;
+        } else if (!window.RTCPeerConnection) {
+            setError('Your browser does not support WebRTC.');
+            callBtn.disabled = true;
+        } else {
+            setStatus('ready', 'Ready');
+        }
+    </script>
+</body>
+</html>

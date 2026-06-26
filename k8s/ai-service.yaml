@@ -1,0 +1,75 @@
+# CallSphere Demo AI voice service: FastAPI on :8081 — Twilio webhook (/twilio),
+# media-stream websocket (/media-stream/..), and the OpenAI Realtime bridge.
+# Runs off the hostPath repo; a venv on disk persists installed deps.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-ai
+  namespace: demo
+  labels:
+    app: demo
+    tier: ai
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: demo
+      tier: ai
+  template:
+    metadata:
+      labels:
+        app: demo
+        tier: ai
+    spec:
+      containers:
+        - name: ai
+          image: python:3.11-bookworm
+          imagePullPolicy: IfNotPresent
+          workingDir: /app/ai-service
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              if [ ! -d venv ]; then
+                echo "[ai] creating venv..."; python -m venv venv
+              fi
+              echo "[ai] installing deps..."; ./venv/bin/pip install --no-cache-dir -r requirements.txt
+              echo "[ai] starting uvicorn..."; exec ./venv/bin/uvicorn main:app --host 0.0.0.0 --port 8081
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          envFrom:
+            - configMapRef: { name: demo-config }
+            - secretRef: { name: demo-app-secrets }
+          ports:
+            - containerPort: 8081
+          readinessProbe:
+            httpGet: { path: /health, port: 8081 }
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 40
+          volumeMounts:
+            - name: app-source
+              mountPath: /app
+      volumes:
+        - name: app-source
+          hostPath:
+            path: /home/ubuntu/apps/demo
+            type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-ai
+  namespace: demo
+spec:
+  selector:
+    app: demo
+    tier: ai
+  ports:
+    - name: http
+      port: 8081
+      targetPort: 8081
