@@ -80,6 +80,35 @@ export class VoiceController {
     }
   }
 
+  // Browser relays realtime function calls (book_appointment / search_knowledge)
+  // here; we proxy to the AI service which runs them server-side.
+  @Post('webrtc/tool')
+  @ApiOperation({ summary: 'Execute a realtime voice tool for the browser agent' })
+  async executeVoiceTool(@Body() body: any): Promise<any> {
+    const aiServiceUrl = this.configService.get('AI_SERVICE_URL') || 'http://localhost:8081';
+    try {
+      const response = await fetch(`${aiServiceUrl}/webrtc/tool`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: body?.name,
+          arguments: body?.arguments ?? {},
+          industry: body?.industry,
+          session_id: body?.sessionId ?? body?.session_id,
+        }),
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new HttpException(`AI service error: ${errorText}`, HttpStatus.BAD_GATEWAY);
+      }
+      return await response.json();
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      console.error('Voice tool exec error:', error);
+      return { output: 'The tool failed; offer to have the team follow up.' };
+    }
+  }
+
   @Post('webrtc/disconnect')
   @ApiOperation({ summary: 'Disconnect WebRTC voice session' })
   @ApiBody({

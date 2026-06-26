@@ -163,6 +163,32 @@ REMEMBER: You are Riley, Reclaim's friendly AI receptionist on a real phone call
             },
         })
 
+        # Real appointment booking on voice calls (writes demo_appointments +
+        # sends an SES confirmation). Handled explicitly in execute_tool.
+        tools.append({
+            "type": "function",
+            "name": "book_appointment",
+            "description": (
+                "Book the caller's appointment and email them a confirmation. "
+                "Call this ONLY after you have collected the caller's full name, a "
+                "valid email, the service they want, a preferred day/time, AND the "
+                "caller has explicitly confirmed they want to book. The confirmation "
+                "email is sent the moment you call this, so never call it before the "
+                "caller confirms."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Caller's full name."},
+                    "email": {"type": "string", "description": "Caller's email address."},
+                    "service": {"type": "string", "description": "Service to book."},
+                    "preferred_time": {"type": "string", "description": "Preferred day/time."},
+                    "notes": {"type": "string", "description": "Any extra notes (optional)."},
+                },
+                "required": ["name", "email", "service", "preferred_time"],
+            },
+        })
+
         self._tools_cache = tools
         logger.info(f"Generated schema for {len(tools)} tools")
         return tools
@@ -208,6 +234,25 @@ REMEMBER: You are Riley, Reclaim's friendly AI receptionist on a real phone call
     async def execute_tool(self, name: str, arguments: Dict[str, Any]) -> Any:
         """Execute a tool and return its result."""
         self._ensure_agents_loaded()
+
+        # Real appointment booking on a voice call (shared core with the chat
+        # agent): writes demo_appointments + sends the SES confirmation.
+        if name == "book_appointment":
+            try:
+                from booking import create_booking
+
+                return create_booking(
+                    self._industry_slug,
+                    self._session_id,
+                    arguments.get("name", ""),
+                    arguments.get("email", ""),
+                    arguments.get("service", ""),
+                    arguments.get("preferred_time", ""),
+                    arguments.get("notes", ""),
+                )
+            except Exception as e:
+                logger.error(f"voice book_appointment failed: {e}")
+                return "I couldn't complete the booking just now — please offer to have the team follow up."
 
         # Single-line demo concierge: switch which industry this agent voices.
         # Resolves the caller's free-text choice to a known industry, scopes

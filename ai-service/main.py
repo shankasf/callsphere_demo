@@ -166,6 +166,101 @@ CHAT CONVERSATION RULES (follow strictly):
 """
 
 
+# Voice-only booking rules + tools for the browser WebRTC realtime session.
+VOICE_BOOKING_RULES = (
+    "BOOKING ON THIS CALL: Keep replies short and natural. Early on, ask for the "
+    "caller's name and email so you can confirm a booking. To book, collect the "
+    "service and a preferred day/time, read them back in one short sentence, and "
+    "ask the caller to confirm. ONLY after they say yes, call the book_appointment "
+    "tool — the confirmation email is sent the moment you call it, so never call "
+    "it before they confirm. For factual questions, call search_knowledge and use "
+    "only what it returns."
+)
+
+VOICE_TOOLS = [
+    {
+        "type": "function",
+        "name": "search_knowledge",
+        "description": (
+            "Look up facts about this business (services, pricing, hours, policies, "
+            "booking) to answer the caller. Pass the caller's question as `query`."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {"query": {"type": "string"}},
+            "required": ["query"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "book_appointment",
+        "description": (
+            "Book the caller's appointment and email a confirmation. Call ONLY after "
+            "you have their name, a valid email, the service, a preferred day/time, "
+            "AND the caller has confirmed. The email sends the moment this is called."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "email": {"type": "string"},
+                "service": {"type": "string"},
+                "preferred_time": {"type": "string"},
+                "notes": {"type": "string"},
+            },
+            "required": ["name", "email", "service", "preferred_time"],
+        },
+    },
+]
+
+
+class VoiceToolRequest(BaseModel):
+    """Browser-side realtime tool execution (function calls arrive over the
+    WebRTC data channel; the browser relays them here to run server-side)."""
+    name: str
+    arguments: Dict[str, Any] = Field(default_factory=dict)
+    industry: Optional[str] = None
+    session_id: Optional[str] = None
+
+
+@app.post("/webrtc/tool")
+async def webrtc_execute_tool(request: VoiceToolRequest):
+    """Execute a realtime voice tool (book_appointment / search_knowledge) for
+    the browser WebRTC agent and return the string output to relay back."""
+    name = request.name
+    args = request.arguments or {}
+    industry_slug = request.industry
+    logger.info(f"[voice-tool] {name} industry={industry_slug} args={list(args.keys())}")
+    try:
+        if name == "book_appointment":
+            from booking import create_booking
+
+            output = create_booking(
+                industry_slug,
+                request.session_id,
+                args.get("name", ""),
+                args.get("email", ""),
+                args.get("service", ""),
+                args.get("preferred_time", ""),
+                args.get("notes", ""),
+            )
+        elif name == "search_knowledge":
+            from industry_context import search_qa
+
+            pairs = search_qa(args.get("query", ""), industry_slug, k=4)
+            output = (
+                "\n\n".join(f"Q: {p['question']}\nA: {p['answer']}" for p in pairs)
+                if pairs
+                else "No specific information found; offer to take a message."
+            )
+        else:
+            output = f"Unknown tool: {name}"
+    except Exception as e:
+        logger.error(f"[voice-tool] {name} failed: {e}")
+        output = "The tool failed; offer to have the team follow up."
+    return {"output": output}
+
+
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     """
@@ -1046,6 +1141,7 @@ async def webrtc_connect(request: WebRTCConnectRequest):
 
         full_instructions = (
             f"{system_prompt}\n\n"
+            f"{VOICE_BOOKING_RULES}\n\n"
             f"CRITICAL: When the call starts, say this EXACT greeting verbatim (word for word):\n\n{greeting_text}\n\n"
             f"Then wait for their response and help them."
         )
@@ -1062,6 +1158,8 @@ async def webrtc_connect(request: WebRTCConnectRequest):
             "instructions": full_instructions,
             "output_modalities": ["audio"],
             "reasoning": {"effort": realtime_reasoning_effort},
+            "tools": VOICE_TOOLS,
+            "tool_choice": "auto",
             "audio": {
                 "input": {
                     "transcription": {"model": transcription_model},

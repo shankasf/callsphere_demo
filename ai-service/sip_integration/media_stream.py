@@ -126,8 +126,12 @@ class MediaStreamHandler:
             from industry_context import get_industry, build_system_prompt
 
             industry = get_industry(getattr(self.session, "industry_slug", None))
-            # Scope mid-call search_knowledge look-ups to this industry's KB.
-            self.agent_adapter.set_industry(industry.get("id"), industry.get("slug"))
+            # Scope mid-call search_knowledge + booking to this industry/session.
+            self.agent_adapter.set_industry(
+                industry.get("id"),
+                industry.get("slug"),
+                session_id=getattr(self.session, "session_id", None),
+            )
             rag_seed = (
                 f"{industry.get('name', '')} services pricing hours availability "
                 f"booking how it works what is included"
@@ -138,7 +142,11 @@ class MediaStreamHandler:
                 "\n\nVOICE-SPECIFIC RULES: Keep responses to 1-2 sentences — this is a "
                 "live phone call. Speak naturally and warmly; use contractions. For any "
                 "factual question, call the search_knowledge tool and answer ONLY from "
-                "what it returns; never invent prices, policies, or guarantees."
+                "what it returns; never invent prices, policies, or guarantees. "
+                "BOOKING: ask for the caller's name and email, collect the service and "
+                "preferred day/time, read them back and ask the caller to confirm, and "
+                "ONLY after they confirm call the book_appointment tool (the "
+                "confirmation email sends the moment you call it)."
             )
             system_prompt = base_prompt + voice_rules
             if greeting_text:

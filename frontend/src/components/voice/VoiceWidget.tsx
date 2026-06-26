@@ -51,6 +51,7 @@ export function VoiceWidget({ overrideRole }: VoiceWidgetProps) {
     const localStreamRef = useRef<MediaStream | null>(null);
     const remoteAudioRef = useRef<HTMLAudioElement>(null);
     const durationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const dataChannelRef = useRef<RTCDataChannel | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const sessionIdRef = useRef<string | null>(null);
 
@@ -119,12 +120,25 @@ export function VoiceWidget({ overrideRole }: VoiceWidgetProps) {
                 pc.addTrack(track, stream);
             });
 
-            // Handle remote audio from OpenAI
+            // Handle remote audio from OpenAI. Explicitly unmute + max volume and
+            // retry play() — autoplay can silently no-op without these even after
+            // a user gesture, which presents as "transcribes but doesn't speak".
             pc.ontrack = (event) => {
                 console.log('Received remote track:', event.track.kind);
-                if (remoteAudioRef.current && event.streams[0]) {
-                    remoteAudioRef.current.srcObject = event.streams[0];
-                    remoteAudioRef.current.play().catch(console.error);
+                const el = remoteAudioRef.current;
+                if (el && event.streams[0]) {
+                    el.srcObject = event.streams[0];
+                    el.muted = false;
+                    el.volume = 1;
+                    const tryPlay = () => el.play().catch((err) => {
+                        console.error('audio play() failed, retrying on gesture:', err);
+                        const resume = () => {
+                            el.play().catch(() => {});
+                            window.removeEventListener('click', resume);
+                        };
+                        window.addEventListener('click', resume, { once: true });
+                    });
+                    tryPlay();
                 }
             };
 
@@ -138,8 +152,9 @@ export function VoiceWidget({ overrideRole }: VoiceWidgetProps) {
 
             // Set up data channel for events (required by OpenAI)
             const dataChannel = pc.createDataChannel('oai-events');
+            dataChannelRef.current = dataChannel;
             dataChannel.onopen = () => console.log('Data channel opened');
-            dataChannel.onmessage = (e) => {
+            dataChannel.onmessage = async (e) => {
                 try {
                     const event = JSON.parse(e.data);
                     console.log('OpenAI event:', event.type);
@@ -157,6 +172,49 @@ export function VoiceWidget({ overrideRole }: VoiceWidgetProps) {
                         event.transcript
                     ) {
                         addMessage('user', event.transcript);
+                    }
+                    // Realtime function call: run it server-side, feed the result back.
+                    if (
+                        event.type === 'response.function_call_arguments.done' &&
+                        event.name &&
+                        event.call_id
+                    ) {
+                        let args: Record<string, unknown> = {};
+                        try {
+                            args = JSON.parse(event.arguments || '{}');
+                        } catch {
+                            /* ignore malformed args */
+                        }
+                        let output = 'The tool failed; offer to have the team follow up.';
+                        try {
+                            const toolBase = window.location.origin.replace(':5173', ':8001');
+                            const res = await fetch(`${toolBase}/api/voice/webrtc/tool`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    name: event.name,
+                                    arguments: args,
+                                    industry: industrySlug || 'all',
+                                    sessionId: sessionIdRef.current,
+                                }),
+                            });
+                            const data = await res.json();
+                            output = data.output ?? output;
+                        } catch (err) {
+                            console.error('Voice tool exec failed:', err);
+                        }
+                        // Return the tool output to the model, then ask it to respond.
+                        dataChannel.send(
+                            JSON.stringify({
+                                type: 'conversation.item.create',
+                                item: {
+                                    type: 'function_call_output',
+                                    call_id: event.call_id,
+                                    output,
+                                },
+                            }),
+                        );
+                        dataChannel.send(JSON.stringify({ type: 'response.create' }));
                     }
                 } catch (err) {
                     console.error('Failed to parse OpenAI event:', err);
