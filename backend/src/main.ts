@@ -6,6 +6,7 @@ import { join } from 'path';
 import { existsSync } from 'fs';
 import { createServer, Server } from 'net';
 import { AppModule } from './app.module';
+import { LoggingInterceptor } from './common/logging.interceptor';
 
 /**
  * Check if a port is available
@@ -42,6 +43,9 @@ async function bootstrap() {
   });
 
   const logger = new Logger('Bootstrap');
+
+  // Structured per-request access logging (method, path, status, duration).
+  app.useGlobalInterceptors(new LoggingInterceptor());
 
   // Enable CORS for frontend (React) and Python AI service
   app.enableCors({

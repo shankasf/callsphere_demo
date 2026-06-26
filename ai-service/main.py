@@ -6,6 +6,7 @@ Provides REST endpoints for chat, voice, and agent interactions.
 """
 
 import logging
+import os
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -26,12 +27,15 @@ from booking import (
     current_session_id as _booking_session,
 )
 
+from db.connection import get_db
+
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("ai-service")
+access_logger = logging.getLogger("ai-service.access")
 
 # Create FastAPI app
 app = FastAPI(
@@ -58,6 +62,31 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def log_requests(request, call_next):
+    """Structured access logging: method, path, status, and duration. Health
+    and noisy poll endpoints are logged at DEBUG to keep the stream readable."""
+    import time as _time
+
+    start = _time.monotonic()
+    rid = uuid.uuid4().hex[:8]
+    path = request.url.path
+    quiet = path in ("/health", "/api/live-sessions") or path.startswith("/metrics")
+    try:
+        response = await call_next(request)
+    except Exception:
+        dur = (_time.monotonic() - start) * 1000
+        access_logger.exception(
+            f"rid={rid} {request.method} {path} -> 500 ERROR ({dur:.0f}ms)"
+        )
+        raise
+    dur = (_time.monotonic() - start) * 1000
+    line = f"rid={rid} {request.method} {path} -> {response.status_code} ({dur:.0f}ms)"
+    access_logger.debug(line) if quiet else access_logger.info(line)
+    response.headers["X-Request-ID"] = rid
+    return response
 
 
 def _responses_output_text(response: Any) -> str:
@@ -326,6 +355,29 @@ async def chat(request: ChatRequest):
 
         # Add assistant response to memory
         memory.add_turn("assistant", result.final_output)
+
+        # Persist the turn for the chatbot-metrics dashboard (best-effort).
+        try:
+            tool_names = [
+                (tc.get("function") or {}).get("name")
+                for tc in (result.tool_calls or [])
+            ]
+            tool_names = [t for t in tool_names if t]
+            get_db().insert(
+                "demo_chat_messages",
+                {
+                    "session_id": session_id,
+                    "industry_slug": industry.get("slug"),
+                    "industry_name": industry.get("name"),
+                    "user_message": request.message[:2000],
+                    "assistant_message": (result.final_output or "")[:2000],
+                    "tool_calls": tool_names or None,
+                    "response_id": getattr(result, "response_id", None),
+                    "channel": "chat",
+                },
+            )
+        except Exception as e:
+            logger.warning(f"chat message persist failed: {e}")
 
         return ChatResponse(
             response=result.final_output,

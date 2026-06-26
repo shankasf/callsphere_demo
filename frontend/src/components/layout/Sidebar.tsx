@@ -19,6 +19,7 @@ import {
     ChevronRight,
     RefreshCw,
     AudioLines,
+    MessageSquare,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import clsx from 'clsx';
@@ -42,6 +43,7 @@ const navGroups: { heading: string; items: NavItem[] }[] = [
             { path: '/live', label: 'Live Calls', icon: Radio },
             { path: '/calls', label: 'Calls', icon: Phone },
             { path: '/business', label: 'Lead Intelligence', icon: TrendingUp },
+            { path: '/chatbot', label: 'Chatbot Metrics', icon: MessageSquare },
         ],
     },
     {

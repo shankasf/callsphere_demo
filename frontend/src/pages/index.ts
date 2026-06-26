@@ -12,6 +12,7 @@ export { SystemPage } from './SystemPage';
 export { CostsPage } from './CostsPage';
 export { IndustryPickerPage } from './IndustryPickerPage';
 export { BusinessMetricsPage } from './BusinessMetricsPage';
+export { ChatbotMetricsPage } from './ChatbotMetricsPage';
 export { LoginPage } from './LoginPage';
 export { RequesterDashboard } from './RequesterDashboard';
 export { AgentDashboard } from './AgentDashboard';

@@ -77,7 +77,43 @@ export const demoApi = {
     });
     return res.data;
   },
+  getChatbotMetrics: async (
+    industry = 'all',
+    range = '7d',
+  ): Promise<ChatbotMetrics> => {
+    const res = await api.get(
+      `/demo/chatbot-metrics?industry=${encodeURIComponent(industry)}&range=${encodeURIComponent(range)}`,
+    );
+    return res.data;
+  },
 };
+
+export interface ChatbotMetrics {
+  range: string;
+  industry: string;
+  totals: {
+    sessions: number;
+    messages: number;
+    avgMessagesPerSession: number;
+    bookings: number;
+    emailsSent: number;
+    conversionRate: number;
+    toolCalls: number;
+    bookToolCalls: number;
+    kbToolCalls: number;
+  };
+  byIndustry: { slug: string; name: string; messages: number; sessions: number }[];
+  topServices: { service: string; count: number }[];
+  daily: { day: string; messages: number; sessions: number }[];
+  recent: {
+    session_id: string;
+    industry_name: string;
+    user_message: string;
+    assistant_message: string;
+    tool_calls: string[] | null;
+    at: string;
+  }[];
+}
 
 // =====================================================
 // BUSINESS / LEAD INTELLIGENCE

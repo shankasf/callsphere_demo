@@ -101,6 +101,117 @@ export class DemoService {
     return { ok: true, emailed, messageId, error: emailError };
   }
 
+  /**
+   * Aggregated chatbot metrics for the dashboard. Reads from
+   * demo_chat_messages (chat turns) + demo_appointments (bookings).
+   * `range` is one of 7d | 30d | all; `industry` is a slug or 'all'.
+   */
+  async getChatbotMetrics(industry = 'all', range = '7d'): Promise<any> {
+    const days = range === '30d' ? 30 : range === 'all' ? null : 7;
+    const sinceSql = days ? `created_at >= now() - interval '${days} days'` : 'TRUE';
+    const indClause =
+      industry && industry !== 'all'
+        ? `AND industry_slug = ${this.q(industry)}`
+        : '';
+
+    const totalsRows = await this.prisma.$queryRawUnsafe<any[]>(`
+      SELECT
+        COUNT(*)::int AS messages,
+        COUNT(DISTINCT session_id)::int AS sessions,
+        COALESCE(SUM(array_length(tool_calls,1)),0)::int AS tool_calls,
+        COUNT(*) FILTER (WHERE 'book_appointment' = ANY(tool_calls))::int AS book_calls,
+        COUNT(*) FILTER (WHERE 'search_knowledge' = ANY(tool_calls))::int AS kb_calls
+      FROM demo_chat_messages
+      WHERE ${sinceSql} ${indClause}
+    `);
+    const totals = totalsRows[0] || {};
+
+    // Bookings made *from chat* = appointments whose session is a chat session.
+    const bookingsRows = await this.prisma.$queryRawUnsafe<any[]>(`
+      SELECT COUNT(*)::int AS bookings,
+             COUNT(*) FILTER (WHERE a.confirmation_sent)::int AS emailed,
+             COUNT(DISTINCT a.session_id)::int AS booking_sessions
+      FROM demo_appointments a
+      WHERE a.session_id IN (
+        SELECT DISTINCT session_id FROM demo_chat_messages
+        WHERE ${sinceSql} ${indClause}
+      )
+      ${days ? `AND a.created_at >= now() - interval '${days} days'` : ''}
+    `);
+    const bookings = bookingsRows[0] || {};
+
+    const byIndustry = await this.prisma.$queryRawUnsafe<any[]>(`
+      SELECT m.industry_slug AS slug,
+             COALESCE(m.industry_name, m.industry_slug) AS name,
+             COUNT(*)::int AS messages,
+             COUNT(DISTINCT m.session_id)::int AS sessions
+      FROM demo_chat_messages m
+      WHERE ${sinceSql}
+      GROUP BY m.industry_slug, m.industry_name
+      ORDER BY messages DESC
+    `);
+
+    const topServices = await this.prisma.$queryRawUnsafe<any[]>(`
+      SELECT a.service, COUNT(*)::int AS count
+      FROM demo_appointments a
+      WHERE a.session_id IN (
+        SELECT DISTINCT session_id FROM demo_chat_messages
+        WHERE ${sinceSql} ${indClause}
+      )
+      ${days ? `AND a.created_at >= now() - interval '${days} days'` : ''}
+      GROUP BY a.service ORDER BY count DESC LIMIT 8
+    `);
+
+    const daily = await this.prisma.$queryRawUnsafe<any[]>(`
+      SELECT to_char(date_trunc('day', created_at), 'YYYY-MM-DD') AS day,
+             COUNT(*)::int AS messages,
+             COUNT(DISTINCT session_id)::int AS sessions
+      FROM demo_chat_messages
+      WHERE created_at >= now() - interval '${days || 14} days' ${indClause}
+      GROUP BY 1 ORDER BY 1
+    `);
+
+    const recent = await this.prisma.$queryRawUnsafe<any[]>(`
+      SELECT session_id, industry_name, user_message, assistant_message,
+             tool_calls, to_char(created_at,'YYYY-MM-DD HH24:MI') AS at
+      FROM demo_chat_messages
+      WHERE ${sinceSql} ${indClause}
+      ORDER BY created_at DESC LIMIT 12
+    `);
+
+    const sessions = totals.sessions || 0;
+    const messages = totals.messages || 0;
+    return {
+      range,
+      industry,
+      totals: {
+        sessions,
+        messages,
+        avgMessagesPerSession: sessions ? +(messages / sessions).toFixed(1) : 0,
+        bookings: bookings.bookings || 0,
+        emailsSent: bookings.emailed || 0,
+        conversionRate: sessions
+          ? +(
+              (Math.min(bookings.booking_sessions || 0, sessions) / sessions) *
+              100
+            ).toFixed(1)
+          : 0,
+        toolCalls: totals.tool_calls || 0,
+        bookToolCalls: totals.book_calls || 0,
+        kbToolCalls: totals.kb_calls || 0,
+      },
+      byIndustry,
+      topServices,
+      daily,
+      recent,
+    };
+  }
+
+  // Single-quote-escape a string for safe inline SQL literal use.
+  private q(s: string): string {
+    return `'${String(s).replace(/'/g, "''")}'`;
+  }
+
   private async sendConfirmation(
     to: string,
     name: string | null,

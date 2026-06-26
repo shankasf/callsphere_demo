@@ -1,4 +1,4 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Post, Get, Body, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { DemoService } from './demo.service';
 
@@ -41,5 +41,14 @@ export class DemoController {
       industrySlug: body?.industrySlug || body?.industry,
       industryName: body?.industryName,
     });
+  }
+
+  @Get('chatbot-metrics')
+  @ApiOperation({ summary: 'Aggregated chatbot metrics for the dashboard' })
+  async chatbotMetrics(
+    @Query('industry') industry?: string,
+    @Query('range') range?: string,
+  ): Promise<any> {
+    return this.demoService.getChatbotMetrics(industry || 'all', range || '7d');
   }
 }

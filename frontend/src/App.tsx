@@ -16,6 +16,7 @@ import {
   IndustryPickerPage,
   OverviewPage,
   BusinessMetricsPage,
+  ChatbotMetricsPage,
   CallsPage,
   LiveCallsPage,
   QualityMetricsPage,
@@ -101,6 +102,7 @@ function AppContent() {
         {/* Public Dashboard Routes (no auth) — require an industry selection */}
         <Route path="/overview" element={<RequireIndustry><OverviewPage /></RequireIndustry>} />
         <Route path="/business" element={<RequireIndustry><BusinessMetricsPage /></RequireIndustry>} />
+        <Route path="/chatbot" element={<RequireIndustry><ChatbotMetricsPage /></RequireIndustry>} />
         <Route path="/calls" element={<RequireIndustry><CallsPage /></RequireIndustry>} />
         {/* Dedicated live-call monitor with real-time transcription. */}
         <Route path="/live" element={<RequireIndustry><LiveCallsPage /></RequireIndustry>} />
